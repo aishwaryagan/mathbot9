@@ -14,6 +14,88 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ─── PASSWORD GATE ────────────────────────────────────────────────────────────
+def check_password():
+    """Block access until the correct class code is entered."""
+    if st.session_state.get("authenticated"):
+        return True
+
+    # Full-screen login page
+    st.markdown("""
+    <style>
+    /* Hide sidebar on login screen */
+    section[data-testid="stSidebar"] { display: none !important; }
+    </style>
+
+    <div style="
+        min-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 2rem;
+    ">
+        <div style="
+            background: linear-gradient(135deg, rgba(0,210,255,0.08), rgba(199,125,255,0.08));
+            border: 1px solid rgba(0,210,255,0.25);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            max-width: 420px;
+            width: 100%;
+        ">
+            <div style="font-size:4rem; margin-bottom:0.5rem; animation: float 3s ease-in-out infinite;">🤖</div>
+            <div style="
+                font-family: 'Orbitron', monospace;
+                font-size: 2.2rem;
+                font-weight: 900;
+                background: linear-gradient(135deg, #00d2ff, #c77dff, #06ffa5);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 0.3rem;
+            ">MathBot9</div>
+            <div style="color: #7a9cc0; font-size: 0.85rem; letter-spacing: 0.2em;
+                        text-transform: uppercase; margin-bottom: 1.8rem;">
+                Ontario Grade 9 · MTH1W
+            </div>
+            <div style="color: #b0cce0; font-size: 0.95rem; margin-bottom: 1.5rem;">
+                🔐 Enter your class access code to continue
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Center the input and button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        code = st.text_input(
+            "Class Access Code",
+            type="password",
+            placeholder="Enter code from your teacher...",
+            label_visibility="collapsed"
+        )
+        entered = st.button("🚀 Enter MathBot9", use_container_width=True)
+
+        if entered:
+            correct_code = st.secrets.get("CLASS_CODE", "mathbot9")
+            if code == correct_code:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("❌ Incorrect code! Ask your teacher for the class access code.")
+
+        st.markdown("""
+        <div style="text-align:center; color:#4a6a8a; font-size:0.75rem; margin-top:1rem;">
+            🔒 Secured for classroom use only
+        </div>
+        """, unsafe_allow_html=True)
+
+    return False
+
+# Run the password gate — stops the app here if not authenticated
+if not check_password():
+    st.stop()
+
 # ─── CUSTOM CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -492,3 +574,4 @@ if user_input:
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
+
