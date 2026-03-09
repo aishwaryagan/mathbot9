@@ -1,0 +1,51 @@
+[theme]
+base = "dark"
+backgroundColor = "#050b1a"
+secondaryBackgroundColor = "#0d1b35"
+primaryColor = "#00d2ff"
+textColor = "#e8f4fd"
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+```
+
+4. Scroll down and click **"Commit new file"**
+
+✅ All files are now uploaded!
+
+---
+
+### STEP 5 — Deploy on Streamlit (Make It a Live Website)
+
+1. Go to **[share.streamlit.io](https://share.streamlit.io)**
+2. Click **"Sign in with GitHub"** — authorize Streamlit when it asks
+3. Click **"New app"**
+4. Fill in the form:
+```
+Repository:     YOUR-USERNAME/mathbot9
+Branch:         main
+Main file path: app.py
+```
+
+5. Click **"Advanced settings"** and add your secret:
+   - Click **"+ Add secret"** (or look for a "Secrets" text box)
+   - Type this exactly:
+```
+ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+   - Replace `sk-ant-...` with your actual API key from [console.anthropic.com](https://console.anthropic.com)
+
+6. Click **"Deploy!"**
+
+Streamlit will take about **2–3 minutes** to install everything and boot up. You'll see a log scrolling — that's normal!
+
+---
+
+### STEP 6 — Share With Your Students 🎉
+
+When it's done, you'll see a URL at the top of the page that looks like:
+```
+https://your-username-mathbot9-app-abc123.streamlit.app
