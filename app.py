@@ -520,92 +520,88 @@ if not st.session_state.messages:
     </div>
     """, unsafe_allow_html=True)
 
-# ─── READ-TO-ME: Speech Synthesis Engine ─────────────────────────────────────
-st.markdown("""
-<script>
-let isSpeaking = false;
+# ─── READ-TO-ME: Speech Synthesis Engine ───────────────────────────────────────────
+import streamlit.components.v1 as components
 
-function cleanTextForSpeech(text) {
-    return text
-        .replace(/\*\*(.*?)\*\*/g, '$1')
-        .replace(/\*(.*?)\*/g, '$1')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/`{1,3}[^`]*`{1,3}/g, '')
-        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-        .replace(/\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]/g, '')
-        .replace(/\n+/g, '. ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
+TTS_SCRIPT = (
+    "<script>"
+    "var _mb9Speaking=false;"
+    "function _mb9Clean(t){"
+        "return t.replace(/\\*\\*(.*?)\\*\\*/g,'$1')"
+        ".replace(/\\*(.*?)\\*/g,'$1')"
+        ".replace(/#{1,6} /g,'')"
+        ".replace(/`[^`]*`/g,'')"
+        ".replace(/\n+/g,'. ')"
+        ".replace(/\s+/g,' ').trim();"
+    "}"
+    "function speakText(t,btn){"
+        "if(_mb9Speaking){"
+            "window.speechSynthesis.cancel();"
+            "_mb9Speaking=false;"
+            "document.querySelectorAll('.tts-btn').forEach(function(b){"
+                "b.innerHTML='&#128266; Read to me';"
+                "b.style.background='rgba(0,210,255,0.1)';"
+                "b.style.borderColor='rgba(0,210,255,0.3)';"
+                "b.style.color='#00d2ff';});"
+            "return;}"
+        "var u=new SpeechSynthesisUtterance(_mb9Clean(t));"
+        "u.rate=0.92;u.pitch=1.05;u.volume=1.0;u.lang='en-CA';"
+        "var vs=window.speechSynthesis.getVoices();"
+        "var pv=vs.find(function(v){"
+            "return v.lang.startsWith('en')&&("
+            "v.name.indexOf('Samantha')>-1||v.name.indexOf('Karen')>-1||"
+            "v.name.indexOf('Daniel')>-1||v.name.indexOf('Google')>-1);});"
+        "if(pv)u.voice=pv;"
+        "btn.innerHTML='&#9209; Stop reading';"
+        "btn.style.background='rgba(255,107,157,0.2)';"
+        "btn.style.borderColor='rgba(255,107,157,0.6)';"
+        "btn.style.color='#ff6b9d';"
+        "_mb9Speaking=true;"
+        "u.onend=function(){"
+            "_mb9Speaking=false;"
+            "btn.innerHTML='&#128266; Read to me';"
+            "btn.style.background='rgba(0,210,255,0.1)';"
+            "btn.style.borderColor='rgba(0,210,255,0.3)';"
+            "btn.style.color='#00d2ff';};"
+        "u.onerror=function(){"
+            "_mb9Speaking=false;"
+            "btn.innerHTML='&#128266; Read to me';"
+            "btn.style.background='rgba(0,210,255,0.1)';"
+            "btn.style.borderColor='rgba(0,210,255,0.3)';"
+            "btn.style.color='#00d2ff';};"
+        "window.speechSynthesis.speak(u);}"
+    "</script>"
+)
 
-function speakText(text, buttonEl) {
-    if (isSpeaking) {
-        window.speechSynthesis.cancel();
-        isSpeaking = false;
-        document.querySelectorAll('.tts-btn').forEach(btn => {
-            btn.innerHTML = '🔊 Read to me';
-            btn.style.background = 'rgba(0,210,255,0.1)';
-            btn.style.borderColor = 'rgba(0,210,255,0.3)';
-            btn.style.color = '#00d2ff';
-        });
-        return;
-    }
-    const cleaned = cleanTextForSpeech(text);
-    const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.rate = 0.92;
-    utterance.pitch = 1.05;
-    utterance.volume = 1.0;
-    utterance.lang = 'en-CA';
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v => v.lang.startsWith('en') && (
-        v.name.includes('Samantha') || v.name.includes('Karen') ||
-        v.name.includes('Daniel') || v.name.includes('Google') || v.name.includes('Natural')
-    ));
-    if (preferred) utterance.voice = preferred;
-    buttonEl.innerHTML = '⏹ Stop reading';
-    buttonEl.style.background = 'rgba(255,107,157,0.2)';
-    buttonEl.style.borderColor = 'rgba(255,107,157,0.6)';
-    buttonEl.style.color = '#ff6b9d';
-    isSpeaking = true;
-    utterance.onend = () => {
-        isSpeaking = false;
-        buttonEl.innerHTML = '🔊 Read to me';
-        buttonEl.style.background = 'rgba(0,210,255,0.1)';
-        buttonEl.style.borderColor = 'rgba(0,210,255,0.3)';
-        buttonEl.style.color = '#00d2ff';
-    };
-    utterance.onerror = () => {
-        isSpeaking = false;
-        buttonEl.innerHTML = '🔊 Read to me';
-        buttonEl.style.background = 'rgba(0,210,255,0.1)';
-        buttonEl.style.borderColor = 'rgba(0,210,255,0.3)';
-        buttonEl.style.color = '#00d2ff';
-    };
-    window.speechSynthesis.speak(utterance);
-}
-</script>
-""", unsafe_allow_html=True)
+def tts_button(text: str, is_hint: bool = False) -> None:
+    """Render a Read-to-me button for a given text string."""
+    safe = (text
+        .replace("\\", "")
+        .replace("'", "")
+        .replace('"', "")
+        .replace("\n", " ")
+        .replace("\r", "")
+    )
+    bg = "rgba(255,217,61,0.12)" if is_hint else "rgba(0,210,255,0.1)"
+    border = "rgba(255,217,61,0.4)" if is_hint else "rgba(0,210,255,0.3)"
+    color = "#ffd93d" if is_hint else "#00d2ff"
+    label = "&#128266; Read hint to me" if is_hint else "&#128266; Read to me"
+    html = (
+        TTS_SCRIPT +
+        f"<button class=\'tts-btn\' onclick=\"speakText(\'{safe}\', this)\" "
+        f"style=\"margin-top:8px;background:{bg};border:1px solid {border};"
+        f"border-radius:20px;color:{color};font-family:sans-serif;font-size:0.75rem;"
+        f"padding:5px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;\">"
+        f"{label}</button>"
+    )
+    components.html(html, height=50)
 
 # ─── CHAT MESSAGES ────────────────────────────────────────────────────────────
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"], avatar="🤖" if message["role"] == "assistant" else "🧑‍🎓"):
         st.markdown(message["content"])
         if message["role"] == "assistant":
-            safe_text = (message["content"]
-                .replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace('"', '\\"')
-                .replace("\n", "\\n")
-                .replace("\r", ""))
-            st.markdown(f"""
-            <button class="tts-btn" onclick="speakText('{safe_text}', this)" style="
-                margin-top:8px; background:rgba(0,210,255,0.1);
-                border:1px solid rgba(0,210,255,0.3); border-radius:20px;
-                color:#00d2ff; font-family:'Exo 2',sans-serif; font-size:0.75rem;
-                padding:5px 14px; cursor:pointer; transition:all 0.2s ease;
-                display:inline-flex; align-items:center; gap:5px;">
-                🔊 Read to me
-            </button>""", unsafe_allow_html=True)
+            tts_button(message["content"], is_hint=False)
 
 # ─── HANDLE INPUT ─────────────────────────────────────────────────────────────
 user_input = st.chat_input("Ask MathBot9 anything... 🔢✨", key="main_input")
@@ -660,21 +656,7 @@ if st.session_state.hint_requested:
         placeholder.markdown(displayed)
 
         # Read-to-me button on hint
-        safe_hint = (hint_response
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", ""))
-        st.markdown(f"""
-        <button class="tts-btn" onclick="speakText('{safe_hint}', this)" style="
-            margin-top:8px; background:rgba(255,217,61,0.12);
-            border:1px solid rgba(255,217,61,0.4); border-radius:20px;
-            color:#ffd93d; font-family:'Exo 2',sans-serif; font-size:0.75rem;
-            padding:5px 14px; cursor:pointer; transition:all 0.2s ease;
-            display:inline-flex; align-items:center; gap:5px;">
-            🔊 Read hint to me
-        </button>""", unsafe_allow_html=True)
+        tts_button(hint_response, is_hint=True)
 
     st.session_state.messages.append({"role": "user", "content": "I need a hint please. Just a small nudge, not the answer."})
     st.session_state.messages.append({"role": "assistant", "content": hint_response})
