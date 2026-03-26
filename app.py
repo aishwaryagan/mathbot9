@@ -520,82 +520,103 @@ if not st.session_state.messages:
     </div>
     """, unsafe_allow_html=True)
 
-# ─── READ-TO-ME: Speech Synthesis Engine ───────────────────────────────────────────
-import streamlit.components.v1 as components
+# ─── READ-TO-ME: Speech Synthesis Engine ──────────────────────────────────────
+# Inject the speech engine ONCE into the parent page using a hidden element trick.
+# We use st.markdown with a zero-height div to load the script into the real DOM
+# (not an iframe), which is required for speechSynthesis to work in browsers.
 
-TTS_SCRIPT = (
-    "<script>"
-    "var _mb9Speaking=false;"
-    "function _mb9Clean(t){"
-        "return t.replace(/\\*\\*(.*?)\\*\\*/g,'$1')"
-        ".replace(/\\*(.*?)\\*/g,'$1')"
-        ".replace(/#{1,6} /g,'')"
-        ".replace(/`[^`]*`/g,'')"
-        ".replace(/\n+/g,'. ')"
-        ".replace(/\s+/g,' ').trim();"
-    "}"
-    "function speakText(t,btn){"
-        "if(_mb9Speaking){"
-            "window.speechSynthesis.cancel();"
-            "_mb9Speaking=false;"
-            "document.querySelectorAll('.tts-btn').forEach(function(b){"
-                "b.innerHTML='&#128266; Read to me';"
-                "b.style.background='rgba(0,210,255,0.1)';"
-                "b.style.borderColor='rgba(0,210,255,0.3)';"
-                "b.style.color='#00d2ff';});"
-            "return;}"
-        "var u=new SpeechSynthesisUtterance(_mb9Clean(t));"
-        "u.rate=0.92;u.pitch=1.05;u.volume=1.0;u.lang='en-CA';"
-        "var vs=window.speechSynthesis.getVoices();"
-        "var pv=vs.find(function(v){"
-            "return v.lang.startsWith('en')&&("
-            "v.name.indexOf('Samantha')>-1||v.name.indexOf('Karen')>-1||"
-            "v.name.indexOf('Daniel')>-1||v.name.indexOf('Google')>-1);});"
-        "if(pv)u.voice=pv;"
-        "btn.innerHTML='&#9209; Stop reading';"
-        "btn.style.background='rgba(255,107,157,0.2)';"
-        "btn.style.borderColor='rgba(255,107,157,0.6)';"
-        "btn.style.color='#ff6b9d';"
-        "_mb9Speaking=true;"
-        "u.onend=function(){"
-            "_mb9Speaking=false;"
-            "btn.innerHTML='&#128266; Read to me';"
-            "btn.style.background='rgba(0,210,255,0.1)';"
-            "btn.style.borderColor='rgba(0,210,255,0.3)';"
-            "btn.style.color='#00d2ff';};"
-        "u.onerror=function(){"
-            "_mb9Speaking=false;"
-            "btn.innerHTML='&#128266; Read to me';"
-            "btn.style.background='rgba(0,210,255,0.1)';"
-            "btn.style.borderColor='rgba(0,210,255,0.3)';"
-            "btn.style.color='#00d2ff';};"
-        "window.speechSynthesis.speak(u);}"
-    "</script>"
-)
+_TTS_JS = """
+<div style="display:none" id="mb9-tts-engine">
+<script>
+if (!window._mb9Ready) {
+    window._mb9Ready = true;
+    window._mb9Speaking = false;
+
+    window._mb9Clean = function(t) {
+        return t
+            .replace(/[*#`]/g, "")
+            .replace(/https?:\/\/\S+/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+    };
+
+    window.speakText = function(t, btn) {
+        if (window._mb9Speaking) {
+            window.speechSynthesis.cancel();
+            window._mb9Speaking = false;
+            document.querySelectorAll(".mb9-tts").forEach(function(b) {
+                b.textContent = "Read to me";
+                b.style.background = "rgba(0,210,255,0.1)";
+                b.style.color = "#00d2ff";
+            });
+            return;
+        }
+        var cleaned = window._mb9Clean(t);
+        var u = new SpeechSynthesisUtterance(cleaned);
+        u.rate = 0.9;
+        u.pitch = 1.0;
+        u.volume = 1.0;
+        u.lang = "en-CA";
+        var loaded = window.speechSynthesis.getVoices();
+        var pick = loaded.find(function(v) {
+            return v.lang.startsWith("en");
+        });
+        if (pick) u.voice = pick;
+        btn.textContent = "Stop";
+        btn.style.background = "rgba(255,107,157,0.25)";
+        btn.style.color = "#ff6b9d";
+        window._mb9Speaking = true;
+        u.onend = function() {
+            window._mb9Speaking = false;
+            btn.textContent = "Read to me";
+            btn.style.background = "rgba(0,210,255,0.1)";
+            btn.style.color = "#00d2ff";
+        };
+        u.onerror = function() {
+            window._mb9Speaking = false;
+            btn.textContent = "Read to me";
+            btn.style.background = "rgba(0,210,255,0.1)";
+            btn.style.color = "#00d2ff";
+        };
+        window.speechSynthesis.speak(u);
+    };
+}
+</script>
+</div>
+"""
+
+st.markdown(_TTS_JS, unsafe_allow_html=True)
+
 
 def tts_button(text: str, is_hint: bool = False) -> None:
-    """Render a Read-to-me button for a given text string."""
+    """Render a Read-to-me button that calls the parent-page speakText function."""
+    # Strip characters that would break the JS string literal
     safe = (text
-        .replace("\\", "")
-        .replace("'", "")
-        .replace('"', "")
+        .replace("\\", " ")
+        .replace('"', " ")
+        .replace("'", " ")
         .replace("\n", " ")
-        .replace("\r", "")
+        .replace("\r", " ")
+        .replace("<", " ")
+        .replace(">", " ")
     )
-    bg = "rgba(255,217,61,0.12)" if is_hint else "rgba(0,210,255,0.1)"
-    border = "rgba(255,217,61,0.4)" if is_hint else "rgba(0,210,255,0.3)"
-    color = "#ffd93d" if is_hint else "#00d2ff"
-    label = "&#128266; Read hint to me" if is_hint else "&#128266; Read to me"
-    html = (
-        TTS_SCRIPT +
-        f"<button class=\'tts-btn\' onclick=\"speakText(\'{safe}\', this)\" "
-        f"style=\"margin-top:8px;background:{bg};border:1px solid {border};"
-        f"border-radius:20px;color:{color};font-family:sans-serif;font-size:0.75rem;"
-        f"padding:5px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;\">"
-        f"{label}</button>"
-    )
-    components.html(html, height=50)
+    bg     = "rgba(255,217,61,0.12)"  if is_hint else "rgba(0,210,255,0.1)"
+    border = "rgba(255,217,61,0.4)"   if is_hint else "rgba(0,210,255,0.3)"
+    color  = "#ffd93d"                if is_hint else "#00d2ff"
+    icon   = "&#x1F4AC; Read hint"   if is_hint else "&#x1F50A; Read to me"
 
+    # Build the button as a plain HTML string — no f-string regex, no escaping issues
+    btn_html = (
+        "<button class=\"mb9-tts\" "
+        "onclick=\"if(window.speakText){window.speakText(\'" + safe + "\',this)}"
+        "else{alert('Speech not ready yet, try again in a second!')}\" "
+        "style=\"margin-top:6px;padding:5px 14px;border-radius:20px;"
+        "border:1px solid " + border + ";background:" + bg + ";color:" + color + ";"
+        "font-size:0.75rem;cursor:pointer;font-family:sans-serif;\">"
+        + icon +
+        "</button>"
+    )
+    st.markdown(btn_html, unsafe_allow_html=True)
 # ─── CHAT MESSAGES ────────────────────────────────────────────────────────────
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"], avatar="🤖" if message["role"] == "assistant" else "🧑‍🎓"):
