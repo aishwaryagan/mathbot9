@@ -385,6 +385,10 @@ if "streak" not in st.session_state:
     st.session_state.streak = 0
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
+if "hint_requested" not in st.session_state:
+    st.session_state.hint_requested = False
+if "last_user_message" not in st.session_state:
+    st.session_state.last_user_message = None
 
 # ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -516,10 +520,92 @@ if not st.session_state.messages:
     </div>
     """, unsafe_allow_html=True)
 
+# ─── READ-TO-ME: Speech Synthesis Engine ─────────────────────────────────────
+st.markdown("""
+<script>
+let isSpeaking = false;
+
+function cleanTextForSpeech(text) {
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/`{1,3}[^`]*`{1,3}/g, '')
+        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+        .replace(/\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]/g, '')
+        .replace(/\n+/g, '. ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function speakText(text, buttonEl) {
+    if (isSpeaking) {
+        window.speechSynthesis.cancel();
+        isSpeaking = false;
+        document.querySelectorAll('.tts-btn').forEach(btn => {
+            btn.innerHTML = '🔊 Read to me';
+            btn.style.background = 'rgba(0,210,255,0.1)';
+            btn.style.borderColor = 'rgba(0,210,255,0.3)';
+            btn.style.color = '#00d2ff';
+        });
+        return;
+    }
+    const cleaned = cleanTextForSpeech(text);
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.rate = 0.92;
+    utterance.pitch = 1.05;
+    utterance.volume = 1.0;
+    utterance.lang = 'en-CA';
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => v.lang.startsWith('en') && (
+        v.name.includes('Samantha') || v.name.includes('Karen') ||
+        v.name.includes('Daniel') || v.name.includes('Google') || v.name.includes('Natural')
+    ));
+    if (preferred) utterance.voice = preferred;
+    buttonEl.innerHTML = '⏹ Stop reading';
+    buttonEl.style.background = 'rgba(255,107,157,0.2)';
+    buttonEl.style.borderColor = 'rgba(255,107,157,0.6)';
+    buttonEl.style.color = '#ff6b9d';
+    isSpeaking = true;
+    utterance.onend = () => {
+        isSpeaking = false;
+        buttonEl.innerHTML = '🔊 Read to me';
+        buttonEl.style.background = 'rgba(0,210,255,0.1)';
+        buttonEl.style.borderColor = 'rgba(0,210,255,0.3)';
+        buttonEl.style.color = '#00d2ff';
+    };
+    utterance.onerror = () => {
+        isSpeaking = false;
+        buttonEl.innerHTML = '🔊 Read to me';
+        buttonEl.style.background = 'rgba(0,210,255,0.1)';
+        buttonEl.style.borderColor = 'rgba(0,210,255,0.3)';
+        buttonEl.style.color = '#00d2ff';
+    };
+    window.speechSynthesis.speak(utterance);
+}
+</script>
+""", unsafe_allow_html=True)
+
 # ─── CHAT MESSAGES ────────────────────────────────────────────────────────────
-for message in st.session_state.messages:
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"], avatar="🤖" if message["role"] == "assistant" else "🧑‍🎓"):
         st.markdown(message["content"])
+        if message["role"] == "assistant":
+            safe_text = (message["content"]
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", ""))
+            st.markdown(f"""
+            <button class="tts-btn" onclick="speakText('{safe_text}', this)" style="
+                margin-top:8px; background:rgba(0,210,255,0.1);
+                border:1px solid rgba(0,210,255,0.3); border-radius:20px;
+                color:#00d2ff; font-family:'Exo 2',sans-serif; font-size:0.75rem;
+                padding:5px 14px; cursor:pointer; transition:all 0.2s ease;
+                display:inline-flex; align-items:center; gap:5px;">
+                🔊 Read to me
+            </button>""", unsafe_allow_html=True)
 
 # ─── HANDLE INPUT ─────────────────────────────────────────────────────────────
 user_input = st.chat_input("Ask MathBot9 anything... 🔢✨", key="main_input")
@@ -529,26 +615,90 @@ if st.session_state.pending_input:
     user_input = st.session_state.pending_input
     st.session_state.pending_input = None
 
+# ── HINT BUTTON ──────────────────────────────────────────────────────────────
+# Only show the hint button if there has been at least one exchange
+if st.session_state.last_user_message and st.session_state.messages:
+    col_hint, col_spacer = st.columns([1, 5])
+    with col_hint:
+        hint_clicked = st.button(
+            "💡 Need a Hint?",
+            key="hint_btn",
+            help="Click for a small nudge — without giving away the answer!"
+        )
+    if hint_clicked:
+        st.session_state.hint_requested = True
+        st.rerun()
+
+# ── PROCESS HINT REQUEST ──────────────────────────────────────────────────────
+if st.session_state.hint_requested:
+    st.session_state.hint_requested = False
+
+    hint_trigger = {"role": "user", "content": "I need a hint please. Just a small nudge, not the answer."}
+
+    with st.chat_message("user", avatar="🧑‍🎓"):
+        st.markdown("💡 *Hint requested...*")
+
+    with st.chat_message("assistant", avatar="🤖"):
+        with st.spinner("MathBot9 is preparing your hint... 💡"):
+            api_messages = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+            ] + [hint_trigger]
+
+            hint_response = chat_with_mathbot(
+                api_messages,
+                active_strand=st.session_state.active_strand if st.session_state.active_strand != "All Strands" else None,
+                hint_mode=True
+            )
+
+        placeholder = st.empty()
+        displayed = ""
+        for char in hint_response:
+            displayed += char
+            placeholder.markdown(displayed + "▌")
+            time.sleep(0.005)
+        placeholder.markdown(displayed)
+
+        # Read-to-me button on hint
+        safe_hint = (hint_response
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", ""))
+        st.markdown(f"""
+        <button class="tts-btn" onclick="speakText('{safe_hint}', this)" style="
+            margin-top:8px; background:rgba(255,217,61,0.12);
+            border:1px solid rgba(255,217,61,0.4); border-radius:20px;
+            color:#ffd93d; font-family:'Exo 2',sans-serif; font-size:0.75rem;
+            padding:5px 14px; cursor:pointer; transition:all 0.2s ease;
+            display:inline-flex; align-items:center; gap:5px;">
+            🔊 Read hint to me
+        </button>""", unsafe_allow_html=True)
+
+    st.session_state.messages.append({"role": "user", "content": "I need a hint please. Just a small nudge, not the answer."})
+    st.session_state.messages.append({"role": "assistant", "content": hint_response})
+    st.rerun()
+
+# ── PROCESS NORMAL MESSAGE ────────────────────────────────────────────────────
 if user_input:
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.last_user_message = user_input
     st.session_state.question_count += 1
 
     with st.chat_message("user", avatar="🧑‍🎓"):
         st.markdown(user_input)
 
-    # Get bot response
     with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("MathBot9 is calculating... 🧮"):
-            # Build API message history (user + assistant only)
             api_messages = [
                 {"role": m["role"], "content": m["content"]}
                 for m in st.session_state.messages
             ]
-
             response = chat_with_mathbot(
                 api_messages,
-                active_strand=st.session_state.active_strand if st.session_state.active_strand != "All Strands" else None
+                active_strand=st.session_state.active_strand if st.session_state.active_strand != "All Strands" else None,
+                hint_mode=False
             )
 
         # Typewriter effect
@@ -574,4 +724,3 @@ if user_input:
 
     st.session_state.messages.append({"role": "assistant", "content": response})
     st.rerun()
-
